@@ -7,6 +7,7 @@ class Delegate
 {
     struct DelegateDataBase
     {
+        virtual ~DelegateDataBase() = default;
         DelegateDataBase* next = nullptr;
         long long Hash = 0;
         virtual void Call(TypeParameter) = 0;
@@ -48,20 +49,20 @@ public:
     template<typename T>
     void bind(T* object, void(T::*method)(TypeParameter))
     {
-        char* str = new char[16];
+        char* str = new char[sizeof(T*) + sizeof(void(T::*)(TypeParameter))];
         const char* ptrToObjectRef = reinterpret_cast<const char*>(&object);
-        for (int i = 0; i < 8; ++i)
+        for (long unsigned int i = 0; i < sizeof(T*); ++i)
             str[i] = ptrToObjectRef[i];
      
         const char* ptrToMethodRef = reinterpret_cast<const char*>(&method);
-        for (int i = 8; i < 16; ++i)
-            str[i] = ptrToMethodRef[i - 8];
+        for (long unsigned int i = sizeof(T*); i < sizeof(T*) + sizeof(void(T::*)(TypeParameter)); ++i)
+            str[i] = ptrToMethodRef[i - sizeof(T*)];
         
         DelegateDataForClass<T>* data = new DelegateDataForClass<T>;
         data->next = firstElement;
         data->object = object;
         data->method = method;
-        data->Hash = FNV1a(str, 16);
+        data->Hash = FNV1a(str, sizeof(T*) + sizeof(void(T::*)(TypeParameter)));
 
         delete[] str;
         
@@ -72,15 +73,15 @@ public:
 
     void bind(void(*func)(TypeParameter))
     {
-        char* str = new char[8];
+        char* str = new char[sizeof(void(*)(TypeParameter))];
         const char* ptrToFuncRef = reinterpret_cast<const char*>(&func);
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < sizeof(void(*)(TypeParameter)); ++i)
             str[i] = ptrToFuncRef[i];
     
         DelegateDataForFunction* data = new DelegateDataForFunction;
         data->next = firstElement;
         data->func = func;
-        data->Hash = FNV1a(str, 8);
+        data->Hash = FNV1a(str, sizeof(func));
         delete[] str;
 
         mDelegateList.lock();
@@ -94,16 +95,16 @@ public:
         if (firstElement == nullptr)
             return;
 
-        char* str = new char[16];
+        char* str = new char[sizeof(T*) + sizeof(void(T::*)(TypeParameter))];
         const char* ptrToObjectRef = reinterpret_cast<const char*>(&object);
-        for (int i = 0; i < 8; ++i)
+        for (long unsigned int i = 0; i < 8; ++i)
             str[i] = ptrToObjectRef[i];
      
         const char* ptrToMethodRef = reinterpret_cast<const char*>(&method);
-        for (int i = 8; i < 16; ++i)
-            str[i] = ptrToMethodRef[i - 8];
+        for (long unsigned int i = sizeof(T*); i < sizeof(T*) + sizeof(void(T::*)(TypeParameter)); ++i)
+            str[i] = ptrToMethodRef[i - sizeof(T*)];
 
-        unsigned int Hash = FNV1a(str, 16);
+        unsigned int Hash = FNV1a(str, sizeof(T*) + sizeof(void(T::*)(TypeParameter)));
         
         DelegateDataBase* iterator = firstElement;
         DelegateDataBase* temp = nullptr;
@@ -117,6 +118,36 @@ public:
                     firstElement = iterator->next;
 
                 delete static_cast<DelegateDataForClass<T>*>(iterator);
+                break;
+            }
+
+            temp = iterator;
+            iterator = iterator->next;
+        }
+    }
+
+    void unbind(void(*func)(TypeParameter))
+    {
+        char* str = new char[sizeof(void(*)(TypeParameter))];
+        const char* ptrToFuncRef = reinterpret_cast<const char*>(&func);
+        for (int i = 0; i < sizeof(void(*)(TypeParameter)); ++i)
+            str[i] = ptrToFuncRef[i];
+    
+        unsigned int Hash = FNV1a(str, sizeof(void(*)(TypeParameter)));
+        delete[] str;
+
+        DelegateDataBase* iterator = firstElement;
+        DelegateDataBase* temp = nullptr;
+        while (iterator != nullptr)
+        {
+            if (iterator->Hash == Hash)
+            {
+                if (temp != nullptr)
+                    temp->next = iterator->next;
+                else
+                    firstElement = iterator->next;
+
+                delete static_cast<DelegateDataForFunction*>(iterator);
                 break;
             }
 
@@ -141,9 +172,10 @@ class Delegate<void>
 {
     struct DelegateDataBase
     {
+        virtual ~DelegateDataBase() = default;
         DelegateDataBase* next = nullptr;
         long long Hash = 0;
-        virtual void Call() = 0;
+        virtual void call() = 0;
     };
         
     template<class T>
@@ -154,7 +186,7 @@ class Delegate<void>
         typedef void(T::*Method)();
         Method method = nullptr;
 
-        void Call() override
+        void call() override
         {
             (object->*method)();
         }
@@ -165,7 +197,7 @@ class Delegate<void>
         typedef void(*Func)();
         Func func = nullptr;
 
-        void Call() override
+        void call() override
         {
             func();
         }
@@ -182,20 +214,20 @@ public:
     template<typename T>
     void bind(T* object, void(T::*method)())
     {
-        char* str = new char[16];
+        char* str = new char[sizeof(T*) + sizeof(void(T::*)())];
         const char* ptrToObjectRef = reinterpret_cast<const char*>(&object);
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < sizeof(T*); ++i)
             str[i] = ptrToObjectRef[i];
      
         const char* ptrToMethodRef = reinterpret_cast<const char*>(&method);
-        for (int i = 8; i < 16; ++i)
-            str[i] = ptrToMethodRef[i - 8];
+        for (int i = sizeof(T*); i < sizeof(T*) + sizeof(void(T::*)()); ++i)
+            str[i] = ptrToMethodRef[i - sizeof(T*)];
         
         DelegateDataForClass<T>* data = new DelegateDataForClass<T>;
         data->next = firstElement;
         data->object = object;
         data->method = method;
-        data->Hash = FNV1a(str, 16);
+        data->Hash = FNV1a(str, sizeof(T*) + sizeof(void(T::*)()));
 
         delete[] str;
         
@@ -206,9 +238,9 @@ public:
 
     void bind(void(*func)())
     {
-        char* str = new char[8];
+        char* str = new char[sizeof(func)];
         const char* ptrToFuncRef = reinterpret_cast<const char*>(&func);
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < sizeof(void(*)()); ++i)
             str[i] = ptrToFuncRef[i];
     
         DelegateDataForFunction* data = new DelegateDataForFunction;
@@ -228,16 +260,16 @@ public:
         if (firstElement == nullptr)
             return;
 
-        char* str = new char[16];
+        char* str = new char[sizeof(T*) + sizeof(void(T::*)())];
         const char* ptrToObjectRef = reinterpret_cast<const char*>(&object);
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < sizeof(T*); ++i)
             str[i] = ptrToObjectRef[i];
      
         const char* ptrToMethodRef = reinterpret_cast<const char*>(&method);
-        for (int i = 8; i < 16; ++i)
-            str[i] = ptrToMethodRef[i - 8];
+        for (int i = sizeof(T*); i < sizeof(T*) + sizeof(void(T::*)()); ++i)
+            str[i] = ptrToMethodRef[i - sizeof(T*)];
 
-        unsigned int Hash = FNV1a(str, 16);
+        unsigned int Hash = FNV1a(str, sizeof(T*) + sizeof(void(T::*)()));
         
         DelegateDataBase* iterator = firstElement;
         DelegateDataBase* temp = nullptr;
@@ -259,12 +291,42 @@ public:
         }
     }
 
+    void unbind(void(*func)())
+    {
+        char* str = new char[sizeof(void(*)())];
+        const char* ptrToFuncRef = reinterpret_cast<const char*>(&func);
+        for (int i = 0; i < sizeof(void(*)()); ++i)
+            str[i] = ptrToFuncRef[i];
+    
+        unsigned int Hash = FNV1a(str, sizeof(void(*)()));
+        delete[] str;
+
+        DelegateDataBase* iterator = firstElement;
+        DelegateDataBase* temp = nullptr;
+        while (iterator != nullptr)
+        {
+            if (iterator->Hash == Hash)
+            {
+                if (temp != nullptr)
+                    temp->next = iterator->next;
+                else
+                    firstElement = iterator->next;
+
+                delete static_cast<DelegateDataForFunction*>(iterator);
+                break;
+            }
+
+            temp = iterator;
+            iterator = iterator->next;
+        }
+    }
+
     void Call() const
     {
         DelegateDataBase* iterator = firstElement;
         while (iterator != nullptr)
         {
-            iterator->Call();
+            iterator->call();
             iterator = iterator->next;
         }
     }
